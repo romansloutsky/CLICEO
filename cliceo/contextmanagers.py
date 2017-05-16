@@ -1,3 +1,4 @@
+import os
 import tempfile
 import contextlib2
 
@@ -23,4 +24,12 @@ def NamedTemporaryFileWithContents(contents,dirpath=None,bufsize=-1,mode='w+b',
   finally:
     tempfile_obj.unlink(tempfile_obj.name)
 
+
+@contextlib2.contextmanager
+def RemoveFileOnExit(fpath):
+  unlink = os.unlink
+  try:
+    yield fpath
+  finally:
+    unlink(fpath)
 
