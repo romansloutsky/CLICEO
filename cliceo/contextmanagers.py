@@ -1,6 +1,8 @@
 import os
 import tempfile
 import contextlib2
+from . import tempdir
+
 
 @contextlib2.contextmanager
 def NamedTemporaryFileWithContents(contents,dirpath=None,bufsize=-1,mode='w+b',
@@ -33,3 +35,39 @@ def RemoveFileOnExit(fpath):
   finally:
     unlink(fpath)
 
+
+class CLIcontextManager(object):
+  def __enter__(self):
+    return self
+  
+  @property
+  def exitstack(self):
+    if not hasattr(self,'_exitstack'):
+      self._exitstack = contextlib2.ExitStack()
+    return self._exitstack
+  
+  def push(self,cm):
+    return self.exitstack.push(cm)
+  
+  def enter_tmpdir(self,dirpath=None,suffix="",prefix=tempfile.template):
+    return self.exitstack.enter_context(tempdir.TemporaryWorkingDirectory(
+                                                                 suffix=suffix,
+                                                                 prefix=prefix,
+                                                                 dir=dirpath))
+  
+  def write_to_tempfile(self,contents,dirpath=None,bufsize=-1,mode='w+b',
+                        suffix="",prefix=tempfile.template):
+    return self.exitstack.enter_context(NamedTemporaryFileWithContents(
+                                                             contents=contents,
+                                                             dirpath=dirpath,
+                                                             bufsize=bufsize,
+                                                             mode=mode,
+                                                             suffix=suffix,
+                                                             prefix=prefix))
+  
+  def register_for_removal(self,fpath):
+    self.push(RemoveFileOnExit(fpath))
+  
+  def __exit__(self,*exception_details):
+    if hasattr(self,'_exitstack'):
+      self._exitstack.close()
