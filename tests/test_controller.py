@@ -84,9 +84,67 @@ class test_CLIcontrollerBase_working_directory(unittest.TestCase):
     self.assertIs(dummycontroller.tmpdir,
                   mockTmpWorkDir_obj.__enter__.return_value)
     self.assertEqual(dummycontroller.dir,'.')
+    self.assertEqual(dummycontroller.tmpdir,'created_temporary_dir')
     self.assertEqual(dummycontroller.in_workdir('dummy'),
                      os.path.join('.','dummy'))
     mockTmpWorkDir_obj.__exit__.assert_called_once_with(mockTmpWorkDir_obj,
                                                         None,None,None)
 
 
+class test_CLIcontrollerBase_calling(unittest.TestCase):
+  @patch('subprocess.Popen')
+  @patch('procCEO.contextmanagers.CLIcontextManager')
+  def test_call_happens_in_cliCM_context(self,patched_cliCM,patched_Popen):
+    mock_cliCM_obj = patched_cliCM.return_value
+    
+    class DummyController(controller.CLIcontrollerBase):
+      def call(_self):
+        mock_cliCM_obj.__enter__.assert_called_once_with()
+        self.assertItemsEqual(mock_cliCM_obj.__exit__.call_args_list,[])
+    
+    
+    dummycontroller = DummyController(callargs=['ls'])
+    patched_cliCM.assert_called_once_with()
+    self.assertItemsEqual(mock_cliCM_obj.__enter__.call_args_list,[])
+    self.assertItemsEqual(mock_cliCM_obj.__exit__.call_args_list,[])
+    dummycontroller()
+    mock_cliCM_obj.__exit__.assert_called_once_with(None,None,None)
+  
+  @patch('subprocess.Popen')
+  def test_call_arg_and_kwarg_reusability(self,patched_Popen):
+    dummypartial = controller.CLIcontrollerBase.partial(callargs=['ls'],
+                                                        callkwargs={'l':True})
+    dummypartial()
+    patched_Popen.assert_called_once_with('ls -l',stdout=None,stderr=None,
+                                          shell=True)
+    patched_Popen.reset_mock()
+    dummypartial()
+    patched_Popen.assert_called_once_with('ls -l',stdout=None,stderr=None,
+                                          shell=True)
+  
+  def test_base_call_string_formatting(self):
+    dummycontroller = controller.CLIcontrollerBase(callargs=['ls','d1','d2'],
+                                                   callkwargs={'l':True,
+                                                               '-a':True,
+                                                               'false':False,
+                                                               'u':'unknown',
+                                                               'another':'a'},
+                                                   option_sep='->')
+    self.assertEqual(dummycontroller.callstr.split()[0],'ls')
+    self.assertItemsEqual(dummycontroller.callstr.split()[1:],
+                          ['-l','-a','-u->unknown','--another->a','d1','d2'])
+  
+  def test_command_and_option_encoding_in_child_controller_class(self):
+    class DummyController(controller.CLIcontrollerBase):
+      _command = 'ls'
+      _option_encodings = {'longform':'-l','valueoption':'-vo='}
+    
+    dummycontroller = DummyController(callargs=['d1','d2'],
+                                      callkwargs={'longform':True,
+                                                  'valueoption':'value',
+                                                  'u':'unknown','another':'a'},
+                                      option_sep='->')
+    self.assertEqual(dummycontroller.callstr.split()[0],'ls')
+    self.assertItemsEqual(dummycontroller.callstr.split()[1:],
+                          ['-l','-vo=value','-u->unknown','--another->a','d1',
+                           'd2'])
