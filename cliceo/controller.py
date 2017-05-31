@@ -66,7 +66,7 @@ class CLIcontrollerBase(object):
   def __init__(self,dirpath=None,in_tmpdir=False,PIDpublisher=None,silent=False,
                err_to_out=False,capture_stdout=False,capture_stderr=False,
                callargs=None,callkwargs=None,option_sep='='):
-    self.dir = dirpath
+    self.dir = '.' if dirpath is None else dirpath
     self.tmpdir = in_tmpdir
     self.PIDpublisher = PIDpublisher
     self.cliCM = self.get_CLI_context_manager()
