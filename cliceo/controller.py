@@ -1,5 +1,6 @@
 import os
 import subprocess
+from functools import partial
 from . import contextmanagers
 
 
@@ -151,3 +152,11 @@ class CLIcontrollerBase(object):
     
     with self.cliCM:
       return self.call()
+  
+  @classmethod
+  def do(cls,*args,**kwargs):
+    return cls(*args,**kwargs)()
+  
+  @classmethod
+  def partial(cls,**kwargs):
+    return partial(cls.do,**kwargs)
