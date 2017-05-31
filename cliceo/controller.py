@@ -71,15 +71,13 @@ class CLIcontrollerBase(object):
     self.PIDpublisher = PIDpublisher
     self.cliCM = self.get_CLI_context_manager()
     
-    if silent:
-      self.stdout = False
-      self.stderr = False
+    self.stdout = subprocess.PIPE if capture_stdout else False if silent\
+                                                                      else None
+    if err_to_out:
+      self.stderr = subprocess.STDOUT
     else:
-      self.stdout = subprocess.PIPE if capture_stdout else None
-      if err_to_out:
-        self.stderr = subprocess.STDOUT
-      else:
-        self.stderr = subprocess.PIPE if capture_stderr else None
+      self.stderr = subprocess.PIPE if capture_stderr else False if silent\
+                                                                      else None
     
     # Get name of command to execute from class attribute or from callargs
     try:
