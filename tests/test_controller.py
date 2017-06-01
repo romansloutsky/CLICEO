@@ -139,12 +139,10 @@ class test_CLIcontrollerBase_calling(unittest.TestCase):
       _command = 'ls'
       _option_encodings = {'longform':'-l','valueoption':'-vo='}
     
-    dummycontroller = DummyController(callargs=['d1','d2'],
-                                      callkwargs={'longform':True,
+    dummycontroller = DummyController(callkwargs={'longform':True,
                                                   'valueoption':'value',
                                                   'u':'unknown','another':'a'},
                                       option_sep='->')
     self.assertEqual(dummycontroller.callstr.split()[0],'ls')
     self.assertItemsEqual(dummycontroller.callstr.split()[1:],
-                          ['-l','-vo=value','-u->unknown','--another->a','d1',
-                           'd2'])
+                          ['-l','-vo=value','-u->unknown','--another->a'])

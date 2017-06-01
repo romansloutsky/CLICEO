@@ -82,8 +82,9 @@ class CLIcontrollerBase(object):
     
     # Get name of command to execute from class attribute or from callargs
     try:
-      # Modifying original callargs makes partials too messy, so make a copy
-      callargs = [a for a in callargs]
+      if callargs is not None:
+        # Modifying original callargs makes partials too messy, so make a copy
+        callargs = [a for a in callargs]
       callstr_pieces = [self.command if self.command else callargs.pop(0)]
     except (TypeError,IndexError):
       raise ValueError("Name of command to be executed must be accessible via"\
