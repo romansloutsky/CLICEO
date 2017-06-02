@@ -130,6 +130,7 @@ class test_CLIcontrollerBase_calling(unittest.TestCase):
                                                                'u':'unknown',
                                                                'another':'a'},
                                                    option_sep='->')
+    dummycontroller.construct_call_string()
     self.assertEqual(dummycontroller.callstr.split()[0],'ls')
     self.assertItemsEqual(dummycontroller.callstr.split()[1:],
                           ['-l','-a','-u->unknown','--another->a','d1','d2'])
@@ -143,6 +144,7 @@ class test_CLIcontrollerBase_calling(unittest.TestCase):
                                                   'valueoption':'value',
                                                   'u':'unknown','another':'a'},
                                       option_sep='->')
+    dummycontroller.construct_call_string()
     self.assertEqual(dummycontroller.callstr.split()[0],'ls')
     self.assertItemsEqual(dummycontroller.callstr.split()[1:],
                           ['-l','-vo=value','-u->unknown','--another->a'])

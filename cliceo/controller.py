@@ -79,23 +79,30 @@ class CLIcontrollerBase(object):
     else:
       self.stderr = subprocess.PIPE if capture_stderr else False if silent\
                                                                       else None
-    
+    # Modifying original callargs makes partials too messy, so make a copy
+    self.callargs = [a for a in callargs] if callargs is not None else None
+    self.callkwargs = callkwargs
+    self.optionsep = option_sep
+  
+  def in_workdir(self,name):
+    '''
+    Path to arbitrary name placed in working directory
+    '''
+    return os.path.join(self.dir,name)
+  
+  def construct_call_string(self):
     # Get name of command to execute from class attribute or from callargs
     try:
-      if callargs is not None:
-        # Modifying original callargs makes partials too messy, so make a copy
-        callargs = [a for a in callargs]
-      callstr_pieces = [self.command if self.command else callargs.pop(0)]
+      callstr_pieces = [self.command if self.command else self.callargs.pop(0)]
     except (TypeError,IndexError):
       raise ValueError("Name of command to be executed must be accessible via"\
                        " self.command (must not return empty string) or passed"\
                        " as first positional argument")
     
-    # Process callkwargs into call string pieces
-    if callkwargs:
-      callkwargscopy = callkwargs.copy()
+    if self.callkwargs:
+      callkwargscopy = self.callkwargs.copy()
       processed_callkwargs = []
-      for k in callkwargs:
+      for k in self.callkwargs:
         try:
           known_encoding = self.option_encodings.get(k)
         except AttributeError:
@@ -104,22 +111,14 @@ class CLIcontrollerBase(object):
           processed_callkwargs.append(self.format_option_str(known_encoding,'',
                                                         callkwargscopy.pop(k)))
       for k,v in callkwargscopy.items():
-        processed_callkwargs.append(self.format_option_str(k,option_sep,v))
+        processed_callkwargs.append(self.format_option_str(k,self.optionsep,v))
       callstr_pieces.extend(processed_callkwargs)
     
-    # Process callargs into call string pieces
-    if callargs:
-      for a in callargs:
+    if self.callargs:
+      for a in self.callargs:
         callstr_pieces.append('%s' % a)
     
-    # Construct the call string
     self.callstr = ' '.join(callstr_pieces)
-  
-  def in_workdir(self,name):
-    '''
-    Path to arbitrary name placed in working directory
-    '''
-    return os.path.join(self.dir,name)
   
   def _run(self):
     child_p = subprocess.Popen(self.callstr,stdout=self.stdout,
@@ -136,6 +135,7 @@ class CLIcontrollerBase(object):
     Deriving classes should extend this method with any activities that must
     be performed inside the CLI context before and/or after the call to _run()
     '''
+    self.construct_call_string()
     self._run()
   
   def __call__(self):
