@@ -9,6 +9,7 @@ from procCEO import controller
 class test_CLIcontrollerBase_std_stream_handling(unittest.TestCase):
   
   def test_std_stream_capture(self,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = (None,None)
     dummycontroller = controller.CLIcontrollerBase(capture_stdout=True,
                                                    callargs=['ls'])
     self.assertIs(dummycontroller.stdout,subprocess.PIPE)
@@ -25,6 +26,7 @@ class test_CLIcontrollerBase_std_stream_handling(unittest.TestCase):
                                      stderr=subprocess.PIPE,shell=True)
     
   def test_stderr_to_stdout(self,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = (None,None)
     dummycontroller = controller.CLIcontrollerBase(err_to_out=True,
                                                    callargs=['ls'])
     self.assertIs(dummycontroller.stderr,subprocess.STDOUT)
@@ -34,6 +36,7 @@ class test_CLIcontrollerBase_std_stream_handling(unittest.TestCase):
   
   @patch('__builtin__.open',new_callable=mock_open)
   def test_std_stream_redirection_to_null(self,mockopen,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = (None,None)
     mockfh = mockopen.return_value
     
     dummycontroller = controller.CLIcontrollerBase(silent=True,callargs=['ls'])
@@ -70,6 +73,7 @@ class test_CLIcontrollerBase_working_directory(unittest.TestCase):
   @patch('subprocess.Popen')
   @patch('procCEO.tempdir.TemporaryWorkingDirectory')
   def test_temporary_working_directory(self,patched_TmpWorkDir,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = (None,None)
     mockTmpWorkDir_obj = patched_TmpWorkDir.return_value 
     mockTmpWorkDir_obj.__enter__.return_value = 'created_temporary_dir'
     dummycontroller = controller.CLIcontrollerBase(dirpath='different_dir',
@@ -92,9 +96,8 @@ class test_CLIcontrollerBase_working_directory(unittest.TestCase):
 
 
 class test_CLIcontrollerBase_calling(unittest.TestCase):
-  @patch('subprocess.Popen')
   @patch('procCEO.contextmanagers.CLIcontextManager')
-  def test_call_happens_in_cliCM_context(self,patched_cliCM,patched_Popen):
+  def test_call_happens_in_cliCM_context(self,patched_cliCM):
     mock_cliCM_obj = patched_cliCM.return_value
     
     class DummyController(controller.CLIcontrollerBase):
@@ -112,6 +115,7 @@ class test_CLIcontrollerBase_calling(unittest.TestCase):
   
   @patch('subprocess.Popen')
   def test_call_arg_and_kwarg_reusability(self,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = (None,None)
     dummypartial = controller.CLIcontrollerBase.partial(callargs=['ls'],
                                                         callkwargs={'l':True})
     dummypartial()
