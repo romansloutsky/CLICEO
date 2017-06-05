@@ -1,6 +1,6 @@
 import unittest
 from mock import patch,Mock,MagicMock
-from procCEO import contextmanagers
+from cliceo import contextmanagers
 
 
 class test_NamedTemporaryFileWithContents(unittest.TestCase):
@@ -39,7 +39,7 @@ class test_CLIcontextManager(unittest.TestCase):
       self.assertItemsEqual(context_obj.__exit__.call_args_list,[])
     context_obj.__exit__.assert_called_once_with(context_obj,None,None,None)
   
-  @patch('procCEO.tempdir.TemporaryWorkingDirectory')
+  @patch('cliceo.tempdir.TemporaryWorkingDirectory')
   def test_handling_entered_tmpdir(self,
                                    patched_TemporaryWorkingDirectory_factory):
     patched_tmpdir_obj = patched_TemporaryWorkingDirectory_factory.return_value
@@ -54,7 +54,7 @@ class test_CLIcontextManager(unittest.TestCase):
     patched_tmpdir_obj.__exit__.assert_called_once_with(patched_tmpdir_obj,
                                                         None,None,None)
   
-  @patch('procCEO.contextmanagers.NamedTemporaryFileWithContents')
+  @patch('cliceo.contextmanagers.NamedTemporaryFileWithContents')
   def test_handling_written_tempfile(self,
                                      patched_NamedTemporaryFileWithContents):
     patched_tmpfile_obj = patched_NamedTemporaryFileWithContents.return_value
@@ -70,7 +70,7 @@ class test_CLIcontextManager(unittest.TestCase):
     patched_tmpfile_obj.__exit__.assert_called_once_with(patched_tmpfile_obj,
                                                         None,None,None)
     
-  @patch('procCEO.contextmanagers.RemoveFileOnExit')
+  @patch('cliceo.contextmanagers.RemoveFileOnExit')
   def test_registering_for_removal(self,patched_RemoveFileOnExit):
     file_removing_obj = patched_RemoveFileOnExit.return_value
     self.cliCM.register_for_removal('dummy_filepath')

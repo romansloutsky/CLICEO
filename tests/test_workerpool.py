@@ -1,7 +1,7 @@
 import unittest
 from mock import patch,PropertyMock
 import contextlib2
-from procCEO import workerpool,controller
+from cliceo import workerpool,controller
 
 
 class TestError(Exception):

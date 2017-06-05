@@ -2,7 +2,7 @@ import os
 import unittest
 from mock import patch,mock_open
 import subprocess
-from procCEO import controller
+from cliceo import controller
 
 
 @patch('subprocess.Popen')
@@ -71,7 +71,7 @@ class test_CLIcontrollerBase_working_directory(unittest.TestCase):
                      os.path.join('different_dir','dummy'))
   
   @patch('subprocess.Popen')
-  @patch('procCEO.tempdir.TemporaryWorkingDirectory')
+  @patch('cliceo.tempdir.TemporaryWorkingDirectory')
   def test_temporary_working_directory(self,patched_TmpWorkDir,patched_Popen):
     patched_Popen.return_value.communicate.return_value = (None,None)
     mockTmpWorkDir_obj = patched_TmpWorkDir.return_value 
@@ -96,7 +96,7 @@ class test_CLIcontrollerBase_working_directory(unittest.TestCase):
 
 
 class test_CLIcontrollerBase_calling(unittest.TestCase):
-  @patch('procCEO.contextmanagers.CLIcontextManager')
+  @patch('cliceo.contextmanagers.CLIcontextManager')
   def test_call_happens_in_cliCM_context(self,patched_cliCM):
     mock_cliCM_obj = patched_cliCM.return_value
     
