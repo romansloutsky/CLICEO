@@ -125,7 +125,7 @@ class CLIcontrollerBase(object):
                                stderr=self.stderr,shell=True)
     if callable(self.PIDpublisher):
       self.PIDpublisher(child_p.pid)
-    child_p.communicate()
+    self.collected_stdout,self.collected_stderr = child_p.communicate()
   
   def call(self):
     '''
