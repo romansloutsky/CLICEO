@@ -87,8 +87,8 @@ class PoolManager(object):
     # In case some of the processes have run out of things to do, give each
     # a dummy task to make sure they check the permission flag, detect that it's
     # False, and signal readiness to die via ready_to_die_queue
-    self.proc_pool.imap(_call_worker_in_worker_proc,
-                        (i for i in xrange(self.proc_pool._processes)))
+    self.proc_pool.imap_unordered(_call_worker_in_worker_proc,
+                                (i for i in xrange(self.proc_pool._processes)))
   
   def cleanup_workers(self,shutdown_announced):
     for pid in self.pid_dict.values():
