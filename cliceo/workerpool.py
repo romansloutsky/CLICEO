@@ -50,7 +50,7 @@ class PoolManager(object):
     self.sleep_lock = self.shared_resources_manager.Lock()
     self.sleep_lock.acquire() # Workers will sleep by waiting to acquire lock
     self.ready_to_die_queue = self.shared_resources_manager.JoinableQueue()
-    if isinstance(work_doer,CLIcontrollerBase):
+    if isinstance(work_doer,type) and issubclass(work_doer,CLIcontrollerBase):
       self.PIDregistry = self.shared_resources_manager.dict()
       
       def registerPID(PID):
