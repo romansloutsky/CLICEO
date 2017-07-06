@@ -9,6 +9,72 @@ class TestError(Exception):
   pass
 
 
+@patch('multiprocessing.Manager')
+class test_Worker(unittest.TestCase):
+  def prepare_IPC_mocks(self,patchedManagerCallable):
+    mocks = {}
+    mockManager = patchedManagerCallable.return_value
+    permission_value = PropertyMock(return_value=True)
+    permission = mockManager.Value.return_value
+    type(permission).value = permission_value
+    mocks['permission'] = permission
+    mocks['permission_value'] = permission_value
+    mocks['sleep_lock'] = mockManager.Lock.return_value
+    mocks['ready_to_die_queue'] = mockManager.JoinableQueue.return_value
+    return mocks
+  
+  def test_successful_calling(self,patchedManagerCallable):
+    mocks = self.prepare_IPC_mocks(patchedManagerCallable)
+    mock_work_callable = Mock(side_effect=['result%d' % i for i in [1,2,3]])
+    mock_PIDcleanup = Mock()
+    
+    worker = workerpool.Worker(mock_work_callable,mocks['permission'],
+                               mocks['sleep_lock'],mocks['ready_to_die_queue'],
+                               mock_PIDcleanup)
+    results = [worker('dummyarg%d' % i) for i in [1,2,3]]
+    
+    self.assertItemsEqual(mocks['permission_value'].call_args_list,
+                          [call() for i in xrange(3)])
+    self.assertItemsEqual(mock_PIDcleanup.call_args_list,
+                          [call() for i in xrange(3)])
+    self.assertItemsEqual(mock_work_callable.call_args_list,
+                          [call('dummyarg%d' % i) for i in [1,2,3]])
+    self.assertItemsEqual(results,['result%d' % i for i in [1,2,3]])
+  
+  def test_not_allowed_to_proceed(self,patchedManagerCallable):
+    mocks = self.prepare_IPC_mocks(patchedManagerCallable)
+    mocks['permission_value'].return_value = False
+    mock_work_callable = Mock()
+    mock_PIDcleanup = Mock()
+    
+    worker = workerpool.Worker(mock_work_callable,mocks['permission'],
+                               mocks['sleep_lock'],mocks['ready_to_die_queue'],
+                               mock_PIDcleanup)
+    worker('arg')
+    
+    self.assertItemsEqual(mock_PIDcleanup.call_args_list,[])
+    self.assertItemsEqual(mock_work_callable.call_args_list,[])
+    mocks['permission_value'].assert_called_once_with()
+    mocks['ready_to_die_queue'].get.assert_called_once_with()
+    mocks['ready_to_die_queue'].task_done.assert_called_once_with()
+    mocks['sleep_lock'].acquire.assert_called_once_with()
+  
+  def test_work_doer_raises_exception(self,patchedManagerCallable):
+    mocks = self.prepare_IPC_mocks(patchedManagerCallable)
+    mock_work_callable = Mock(side_effect=TestError)
+    mock_PIDcleanup = Mock()
+    
+    worker = workerpool.Worker(mock_work_callable,mocks['permission'],
+                               mocks['sleep_lock'],mocks['ready_to_die_queue'],
+                               mock_PIDcleanup)
+    r1,r2,_ = worker('arg')
+    
+    self.assertItemsEqual(mock_PIDcleanup.call_args_list,[])
+    mock_work_callable.assert_called_once_with('arg')
+    self.assertIs(r1,TestError)
+    self.assertTrue(isinstance(r2,TestError))
+
+
 class TestController(controller.CLIcontrollerBase):
   _command = 'ls'
   
