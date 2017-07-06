@@ -94,7 +94,7 @@ def mocked_worker_proc(work_doer,return_shared_objects=False,**kwargs):
       yield mocks,workerpool.PoolManager(work_doer,**kwargs)
 
 
-class test_parallel_execution_with_PoolManager(unittest.TestCase):
+class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
   
   @patch('cliceo.workerpool.partial')
   def test_execution_with_arbitrary_callable(self,patched_partial):
