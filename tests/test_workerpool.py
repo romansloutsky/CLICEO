@@ -265,3 +265,5 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
                              for i in CALLSEQ])
       self.assertItemsEqual(mocks['PIDregistry'].pop.call_args_list,
                             [call('dummyProc') for i in CALLSEQ])
+      mocks['workerpool'].close.assert_called_once_with()
+      mocks['workerpool'].join.assert_called_once_with()
