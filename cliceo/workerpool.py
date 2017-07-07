@@ -81,7 +81,7 @@ class PoolManager(object):
                                           initargs=(worker,))
   
   def announce_shutdown(self):
-    for _ in self.proc_pool._pool:
+    for _ in xrange(self.proc_pool._processes):
       self.ready_to_die_queue.put(None)
     self.permission.value = False
     # In case some of the processes have run out of things to do, give each
