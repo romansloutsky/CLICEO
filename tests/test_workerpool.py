@@ -343,3 +343,79 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
                             [call('dummyProc') for i in CALLSEQ])
       mocks['workerpool'].close.assert_called_once_with()
       mocks['workerpool'].join.assert_called_once_with()
+
+
+class test_exception_hangling_by_Worker_and_PoolManager(unittest.TestCase):
+   
+  def verify_shutdown_announced_and_all_workers_went_to_sleep(self,mocks):
+    numproc = mocks['workerpool']._processes
+    nprocsxrange = xrange(numproc)
+     
+    # PoolManager should have done these
+    self.assertItemsEqual(mocks['ready_to_die_queue'].put.call_args_list,
+                            [call(None) for _ in nprocsxrange])
+    self.assertIs(mocks['permission'].value,False)
+     
+    # Each worker should have done these
+    self.assertItemsEqual(mocks['ready_to_die_queue'].get.call_args_list,
+                            [call() for _ in nprocsxrange])
+    self.assertItemsEqual(mocks['ready_to_die_queue'].task_done.call_args_list,
+                            [call() for _ in nprocsxrange])
+    self.assertItemsEqual(mocks['sleep_lock'].acquire.call_args_list,
+                            [call() for _ in xrange(numproc+1)])
+                                             # Additional call made by PoolManager
+   
+  def verify_pool_termination_closure_and_joining(self,mocks):
+      # Pool should be terminated, closed, and joined on any error-caused shutdown
+      mocks['workerpool'].terminate.assert_called_once_with()
+      mocks['workerpool'].close.assert_called_once_with()
+      mocks['workerpool'].join.assert_called_once_with()
+   
+  def test_arbitrary_callable_all_worker_halt_on_error_encountered_by_one(self):
+    NUMPROC = 4
+    CALLSEQ = [0,1,2,3,4,5]
+    dummy_work_doer = Mock(side_effect=[0,1,2,TestError,4,5])
+     
+    with patched_multiproc_setup() as mocks:
+      poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
+      # Since an arbitrary callable was used, not a CLIcontrollerBase instance,
+      # poolmanager.PIDregistry should not have been created
+      self.assertFalse(hasattr(poolmanager,'PIDregistry'))
+      mocks['seq_to_map'] = CALLSEQ
+      mocks['verify_shutdown_to_this_point'] = workerpool.partial(
+            self.verify_shutdown_announced_and_all_workers_went_to_sleep,mocks)
+      with self.assertRaises(TestError):
+        [r for r in poolmanager(CALLSEQ)]
+      mocks['ready_to_die_queue'].join.assert_called_once_with()
+      self.assertItemsEqual(mocks['PIDregistry'].values.call_args_list,[])
+      self.verify_pool_termination_closure_and_joining(mocks)
+   
+  @patch('psutil.Process')
+  def test_CLIcontroller_all_worker_halt_on_error_encountered_by_one(self,
+                                                                patchedPsutil):
+    top_proc = patchedPsutil.return_value
+    child_procs = [Mock(),Mock(),Mock()]
+    top_proc.children.return_value = child_procs
+    
+    NUMPROC = 4
+    CALLSEQ = [0,1,2,3,4,5]
+     
+    with patched_multiproc_setup() as mocks:
+      mocks['PIDregistry'].values.return_value = ['dummyPID']
+      poolmanager = workerpool.PoolManager(TestController,numproc=NUMPROC,
+                                           err_to_out=True,capture_stdout=True,
+                                           raise_on=3)
+      self.assertTrue(hasattr(poolmanager,'PIDregistry'))
+      mocks['seq_to_map'] = CALLSEQ
+      mocks['verify_shutdown_to_this_point'] = workerpool.partial(
+            self.verify_shutdown_announced_and_all_workers_went_to_sleep,mocks)
+      with self.assertRaises(TestError):
+        [r for r in poolmanager(CALLSEQ)]
+      mocks['ready_to_die_queue'].join.assert_called_once_with()
+      mocks['PIDregistry'].values.assert_called_once_with()
+      patchedPsutil.assert_called_once_with(pid='dummyPID')
+      top_proc.children.assert_called_once_with(recursive=True)
+      for proc in [top_proc]+child_procs:
+        proc.kill.assert_called_once_with()
+      mocks['ready_to_die_queue'].join.assert_called_once_with()
+      self.verify_pool_termination_closure_and_joining(mocks)
