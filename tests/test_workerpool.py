@@ -109,6 +109,33 @@ class TestController(controller.CLIcontrollerBase):
     return controller.CLIcontrollerBase.partial.__func__(cls,**kwargs)
 
 
+class AllWorkersSleeping(Exception):
+  pass
+
+# Utility function imitates the distribution of arguments from sequence to map
+# out to workers by cycling over "workers" (dicts representing global state of
+# worker processes), checking whether the worker has gone to sleep by calling
+# sleep_lock.acquire(), and assigning the argument to the next awake worker.
+# If all workers are asleep, as should eventually happen when shutdown is
+# announced by PoolManager, AllWorkersSleeping is raised notifying upstream
+# that ready_to_die_queue.join() success can now be imitated.
+def cycling_worker_assigner(worker_num_cycler,mocks,outer_worker_fxn,seq_to_map):
+  for item in seq_to_map:
+    curr_worker = None
+    while curr_worker != mocks['current_worker']:
+      curr_worker = worker_num_cycler.next()
+    for _ in xrange(mocks['workerpool']._processes):
+      next_worker = worker_num_cycler.next()
+      if mocks['worker_global_dicts'][next_worker]['sleeping']:
+        mocks['globals_fxn']()
+        continue
+      else:
+        break
+    else:
+      raise AllWorkersSleeping
+    mocks['last_item_assigned_to_worker'] = item
+    yield outer_worker_fxn(item)
+
 @contextlib2.contextmanager
 def patched_multiproc_setup():
   with patch('__builtin__.globals') as patched_globals_fxn:
@@ -118,6 +145,9 @@ def patched_multiproc_setup():
       with patch('multiprocessing.Pool') as patchedPoolCallable:
         mock_worker_pool = Mock(spec=pool.Pool) #Actual Pool class
         
+        # Several steps in initializing the multiproc mocking setup must happen
+        # on instantiation of a worker pool, once the number of requested
+        # workers becomes known
         def Pool_call_side_effect(numproc,initializer,initargs):
           (real_worker,) = initargs
           mocks['worker_global_dicts'] = [{'num':i,'sleeping':False}
@@ -152,9 +182,15 @@ def patched_multiproc_setup():
         patchedPoolCallable.side_effect = Pool_call_side_effect
         mocks['PoolCallable'] = patchedPoolCallable
         mocks['workerpool'] = mock_worker_pool
+        
         def mock_imap_side_effect(outer_worker_fxn,seq_to_map):
-          for item in seq_to_map:
-            yield outer_worker_fxn(item)
+          # Call to imap_unordered happens after pool initialization, so
+          # mock_worker_pool._processes will have been set to numproc in call
+          # to Pool_call_side_effect()
+          worker_num_cycler = cycle(xrange(mock_worker_pool._processes))
+          return cycling_worker_assigner(worker_num_cycler,mocks,
+                                         outer_worker_fxn,seq_to_map)
+        
         mocks['workerpool'].imap_unordered.side_effect = mock_imap_side_effect
         with patch('cliceo.workerpool.SyncManager') as patchedSyncManager:
           mockManager = patchedSyncManager.return_value
@@ -184,7 +220,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
   def test_execution_with_arbitrary_callable(self,patched_partial):
     NUMPROC = 3
     CALLSEQ = [0,1,2,3,4,5]
-    def dummy_work_doer(mocks):
+    def dummy_work_doer(arg):
       pass
     with patched_multiproc_setup() as mocks:
       poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC,
