@@ -1,6 +1,7 @@
 import sys
 import psutil
 import multiprocessing
+from multiprocessing.managers import SyncManager
 import signal
 from ctypes import c_bool
 from functools import partial
@@ -40,12 +41,16 @@ class Worker(object):
       self.sleep_lock.acquire()
 
 
+def init_process_to_ignore_SIGINT():
+  signal.signal(signal.SIGINT,signal.SIG_IGN)
+
 class PoolManager(object):
   def __init__(self,work_doer,numproc=None,let_workers_finish_on_interrupt=True,
                even_on_KeyboardInterrupt=False,**kwargs):
     self.announce = let_workers_finish_on_interrupt
     self.even_on_KeyboardInterrupt = even_on_KeyboardInterrupt
-    self.shared_resources_manager = multiprocessing.Manager()
+    self.shared_resources_manager = SyncManager()
+    self.shared_resources_manager.start(initializer=init_process_to_ignore_SIGINT)
     self.permission = self.shared_resources_manager.Value(c_bool,True)
     self.sleep_lock = self.shared_resources_manager.Lock()
     self.sleep_lock.acquire() # Workers will sleep by waiting to acquire lock
@@ -74,7 +79,7 @@ class PoolManager(object):
       # it and deferring to the main process to handle everything, including
       # worker shutdown.
       # See: http://noswap.com/blog/python-multiprocessing-keyboardinterrupt
-      signal.signal(signal.SIGINT,signal.SIG_IGN)
+      init_process_to_ignore_SIGINT()
       globals()['worker'] = worker
     
     self.proc_pool = multiprocessing.Pool(numproc,initializer=init_worker_process,

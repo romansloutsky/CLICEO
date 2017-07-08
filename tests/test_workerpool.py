@@ -156,8 +156,8 @@ def patched_multiproc_setup():
           for item in seq_to_map:
             yield outer_worker_fxn(item)
         mocks['workerpool'].imap_unordered.side_effect = mock_imap_side_effect
-        with patch('multiprocessing.Manager') as patchedManagerCallable:
-          mockManager = patchedManagerCallable.return_value
+        with patch('cliceo.workerpool.SyncManager') as patchedSyncManager:
+          mockManager = patchedSyncManager.return_value
           permission_value = PropertyMock(return_value=True)
           permission = mockManager.Value.return_value
           type(permission).value = permission_value
