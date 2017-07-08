@@ -419,3 +419,39 @@ class test_exception_hangling_by_Worker_and_PoolManager(unittest.TestCase):
         proc.kill.assert_called_once_with()
       mocks['ready_to_die_queue'].join.assert_called_once_with()
       self.verify_pool_termination_closure_and_joining(mocks)
+
+
+class test_PoolManager_execution_with_labels(unittest.TestCase):
+  
+  def test_successful_execution_with_labeled_input(self):
+    NUMPROC = 3
+    CALLSEQ = [0,1,2,3,4,5]
+    LABELS = [str(i) for i in CALLSEQ]
+    LABELEDCALLSEQ = zip(LABELS,CALLSEQ)
+    dummy_work_doer = Mock(side_effect=[10*i for i in CALLSEQ])
+    
+    with patched_multiproc_setup() as mocks:
+      poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
+      results = [r for r in poolmanager(
+                            workerpool.LabeledObject.labeled_objects_sequence(
+                                                              LABELEDCALLSEQ))]
+      self.assertItemsEqual([(r.label,r.result) for r in results],
+                            zip(LABELS,[10*i for i in CALLSEQ]))
+    
+  def test_halt_on_error_with_labeled_input(self):
+    NUMPROC = 3
+    CALLSEQ = [0,1,2,3,4,5]
+    LABELS = [str(i) for i in CALLSEQ]
+    LABELEDCALLSEQ = zip(LABELS,CALLSEQ)
+    dummy_work_doer = Mock(side_effect=[TestError if i==3 else 10*i
+                                        for i in CALLSEQ])
+    
+    with patched_multiproc_setup() as mocks:
+      poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
+      with self.assertRaises(TestError):
+        mocks['seq_to_map'] = CALLSEQ
+        [r for r in poolmanager(
+                            workerpool.LabeledObject.labeled_objects_sequence(
+                                                              LABELEDCALLSEQ))]
+      self.assertTrue(hasattr(poolmanager,'error_on_label'))
+      self.assertEqual(poolmanager.error_on_label,'3')

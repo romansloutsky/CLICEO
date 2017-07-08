@@ -5,12 +5,54 @@ from multiprocessing.managers import SyncManager
 import signal
 from ctypes import c_bool
 from functools import partial
+import contextlib2
 from tblib import pickling_support
 from .controller import CLIcontrollerBase
 
 
 def _call_worker_in_worker_proc(task_arg):
   return globals()['worker'](task_arg)
+
+
+class LabeledObject(object):
+  def __init__(self,label,obj,is_result=False):
+    self.label = label
+    self.obj = obj
+    self.is_result = is_result
+  
+  @property
+  def result(self):
+    if self.is_result:
+      return self.obj
+    else:
+      raise ValueError('This is not a result')
+  
+  @classmethod
+  def _reapply_label(cls,label,result):
+    return cls(label,result,is_result=True)
+  
+  def reapply_label_to_result(self,result):
+    return self._reapply_label(self.label,result)
+  
+  @staticmethod
+  def do_nothing(obj):
+    return obj
+  
+  @classmethod
+  @contextlib2.contextmanager
+  def strip_label(cls,obj):
+    if isinstance(obj,cls):
+      if obj.is_result:
+        raise ValueError('This is not a result')
+      else:
+        yield obj.obj,obj.reapply_label_to_result
+    else:
+      yield obj,cls.do_nothing
+  
+  @classmethod
+  def labeled_objects_sequence(cls,sequence):
+    for label,obj in sequence:
+      yield cls(label,obj)
 
 
 class Worker(object):
@@ -24,15 +66,16 @@ class Worker(object):
   
   def __call__(self,arg):
     if self.proceed.value:
-      try:
-        result = self.callable(arg)
-        self.PIDcleanup()
-      except Exception:
-        result = sys.exc_info()
-        # Automagically allow pickling traceback details for returning them to
-        # pool manager, allowing manager to raise error with correct traceback
-        pickling_support.install()
-      return result
+      with LabeledObject.strip_label(arg) as (argval,reapply_label):
+        try:
+          result = self.callable(argval)
+          self.PIDcleanup()
+        except Exception:
+          result = sys.exc_info()
+          # Automagically allow pickling traceback details for returning them to
+          # pool manager, allowing manager to raise error with correct traceback
+          pickling_support.install()
+        return reapply_label(result)
     else:
       # Signal to pool manager readiness to be terminated
       self.ready_to_die_queue.get()
@@ -112,8 +155,12 @@ class PoolManager(object):
       results = self.proc_pool.imap_unordered(_call_worker_in_worker_proc,
                                               sequence_to_map)
       for r in results:
-        if isinstance(r,tuple) and len(r) == 3 and issubclass(r[0],Exception):
-          raise r[0],r[1],r[2] # Exception type, value, traceback
+        rval = r.result if isinstance(r,LabeledObject) else r
+        if isinstance(rval,tuple) and len(rval) == 3 and issubclass(rval[0],
+                                                                    Exception):
+          if isinstance(r,LabeledObject):
+            self.error_on_label = r.label
+          raise rval[0],rval[1],rval[2] # Exception type, value, traceback
         else:
           yield r
     except:
