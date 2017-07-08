@@ -1,7 +1,7 @@
 import unittest
 from multiprocessing import pool
 from itertools import cycle
-from mock import patch,PropertyMock,Mock,call
+from mock import patch,PropertyMock,Mock,call,DEFAULT
 import contextlib2
 from cliceo import workerpool,controller
 
@@ -195,6 +195,17 @@ def patched_multiproc_setup():
         with patch('cliceo.workerpool.SyncManager') as patchedSyncManager:
           mockManager = patchedSyncManager.return_value
           permission_value = PropertyMock(return_value=True)
+          def permission_value_access_side_effect(*args):
+            # PropertyMock gets called with no argument when the value is checked
+            # and with one argument when the value is set. So, if an argument is
+            # received, the PropertyMock's return_value is set to that argument.
+            if args:
+              permission_value.return_value = args[0]
+            # Returning special value DEFAULT from the mock module from
+            # side_effect causes the Mock object (and its variants) to return
+            # the object's return_value
+            return DEFAULT
+          permission_value.side_effect = permission_value_access_side_effect
           permission = mockManager.Value.return_value
           type(permission).value = permission_value
           mocks['permission'] = permission
