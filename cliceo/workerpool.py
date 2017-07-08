@@ -1,5 +1,5 @@
 import sys
-import os
+import psutil
 import multiprocessing
 import signal
 from ctypes import c_bool
@@ -91,11 +91,15 @@ class PoolManager(object):
                                 (i for i in xrange(self.proc_pool._processes)))
   
   def cleanup_workers(self,shutdown_announced):
-    for pid in self.pid_dict.values():
-      try:
-        os.kill(pid,signal.SIGTERM)
-      except OSError:
-        pass
+    if hasattr(self,'PIDregistry'):
+      for pid in self.PIDregistry.values():
+        try:
+          top_proc = psutil.Process(pid=pid)
+          children = top_proc.children(recursive=True)
+          for proc in [top_proc]+children:
+              proc.kill()
+        except OSError:
+          pass
     if not shutdown_announced:
       self.ready_to_die_queue.join()
   
