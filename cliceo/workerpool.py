@@ -142,8 +142,11 @@ class PoolManager(object):
           top_proc = psutil.Process(pid=pid)
           children = top_proc.children(recursive=True)
           for proc in [top_proc]+children:
+            try:
               proc.kill()
-        except OSError:
+            except psutil.NoSuchProcess:
+              pass
+        except psutil.NoSuchProcess:
           pass
     self.ready_to_die_queue.join()
   
