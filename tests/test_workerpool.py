@@ -212,6 +212,35 @@ def patched_multiproc_setup():
           mocks['permission_value'] = permission_value
           mocks['sleep_lock'] = mockManager.Lock.return_value
           mocks['ready_to_die_queue'] = mockManager.JoinableQueue.return_value
+           
+          # When PoolManager tries to join the ready_to_die_queue, the
+          # asynchronous nature of the worker pool is imitated by continuing to
+          # assign arguments to "workers" using cycling_worker_assigner() until
+          # all workers have had a chance to notice the shutdown announcement
+          # and go to sleep
+          def ready_to_die_queue_join_side_effect():
+            reached_unassigned = False
+            remaining_seq_to_map = []
+            # *** Test method must insert seq_to_map into mocks! ***
+            for item in mocks['seq_to_map']:
+              if item == mocks['last_item_assigned_to_worker']:
+                reached_unassigned = True
+                continue
+              if reached_unassigned:
+                remaining_seq_to_map.append(item)
+            nprocsxrange = xrange(mocks['workerpool']._processes)
+            remaining_seq_to_map.extend(nprocsxrange)
+            try:
+              for _ in cycling_worker_assigner(cycle(nprocsxrange),mocks,
+                                        workerpool._call_worker_in_worker_proc,
+                                               remaining_seq_to_map):
+                pass
+            except AllWorkersSleeping:
+              # *** Test method must insert this testing callable into mocks! ***
+              mocks['verify_shutdown_to_this_point']()
+          
+          mocks['ready_to_die_queue'].join.side_effect = \
+                                            ready_to_die_queue_join_side_effect
           mocks['PIDregistry'] = mockManager.dict.return_value
           with patch('subprocess.Popen') as patchedPopen:
             child_p = patchedPopen.return_value
