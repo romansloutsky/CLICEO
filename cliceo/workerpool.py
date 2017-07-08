@@ -45,10 +45,7 @@ def init_process_to_ignore_SIGINT():
   signal.signal(signal.SIGINT,signal.SIG_IGN)
 
 class PoolManager(object):
-  def __init__(self,work_doer,numproc=None,let_workers_finish_on_interrupt=True,
-               even_on_KeyboardInterrupt=False,**kwargs):
-    self.announce = let_workers_finish_on_interrupt
-    self.even_on_KeyboardInterrupt = even_on_KeyboardInterrupt
+  def __init__(self,work_doer,numproc=None,**kwargs):
     self.shared_resources_manager = SyncManager()
     self.shared_resources_manager.start(initializer=init_process_to_ignore_SIGINT)
     self.permission = self.shared_resources_manager.Value(c_bool,True)
@@ -95,7 +92,7 @@ class PoolManager(object):
     self.proc_pool.imap_unordered(_call_worker_in_worker_proc,
                                 (i for i in xrange(self.proc_pool._processes)))
   
-  def cleanup_workers(self,shutdown_announced):
+  def cleanup_workers(self):
     if hasattr(self,'PIDregistry'):
       for pid in self.PIDregistry.values():
         try:
@@ -105,8 +102,7 @@ class PoolManager(object):
               proc.kill()
         except OSError:
           pass
-    if not shutdown_announced:
-      self.ready_to_die_queue.join()
+    self.ready_to_die_queue.join()
   
   def __call__(self,sequence_to_map):
     '''
@@ -120,20 +116,9 @@ class PoolManager(object):
           raise r[0],r[1],r[2] # Exception type, value, traceback
         else:
           yield r
-    except KeyboardInterrupt:
-      if self.announce and self.even_on_KeyboardInterrupt:
-        self.announce_shutdown()
-        self.cleanup_workers(shutdown_announced=True)
-      else:
-        self.cleanup_workers(shutdown_announced=False)
-      self.proc_pool.terminate()
-      raise
     except:
-      if self.announce:
-        self.announce_shutdown()
-        self.cleanup_workers(shutdown_announced=True)
-      else:
-        self.cleanup_workers(shutdown_announced=False)
+      self.announce_shutdown()
+      self.cleanup_workers()
       self.proc_pool.terminate()
       raise
     finally:
