@@ -4,7 +4,78 @@ from functools import partial
 from . import contextmanagers
 
 
-class CLIcontrollerBase(object):
+class CommandLineCaller(object):
+  
+  @classmethod
+  def get_CLI_context_manager(cls):
+    return contextmanagers.CLIcontextManager()
+  
+  def __init__(self,PIDpublisher=None,in_tmpdir=False,tmpdir_loc=None,
+                    capture_stdout=False,silence_stdout=False,
+                    err_to_out=False,capture_stderr=False,silence_stderr=False):
+    self.tmpdir = in_tmpdir
+    self.tmpdir_loc = tmpdir_loc
+    self.PIDpublisher = PIDpublisher
+    self.cliCM = self.get_CLI_context_manager()
+    
+    self.stdout = subprocess.PIPE if capture_stdout else False if silence_stdout\
+                                                                      else None
+    if err_to_out:
+      self.stderr = subprocess.STDOUT
+    else:
+      self.stderr = subprocess.PIPE if capture_stderr else False if silence_stderr\
+                                                                      else None
+  
+  def _run(self,callstr):
+    child_p = subprocess.Popen(callstr,stdout=self.stdout,stderr=self.stderr,
+                               shell=True)
+    if callable(self.PIDpublisher):
+      self.PIDpublisher(child_p.pid)
+    self.captured_stdout,self.captured_stderr = child_p.communicate()
+  
+  def call(self,callstr):
+    '''
+    This method runs inside the CLI context and passes the call from __call__()
+    to _run().
+    
+    Deriving classes should extend this method with any activities that must
+    be performed inside the CLI context before and/or after the call to _run()
+    '''
+    self._run(callstr)
+  
+  def __call__(self,callstr=None):
+    if self.tmpdir:
+      self.tmpdir = self.cliCM.enter_tmpdir(self.tmpdir_loc)
+    
+    if self.stdout is False or self.stderr is False:
+      devnull = open(os.devnull,'w')
+      self.cliCM.push(devnull)
+      if self.stdout is False:
+        self.stdout = devnull
+      if self.stderr is False:
+        self.stderr = devnull
+    
+    with self.cliCM:
+      if callstr is None:
+        # Relieve inheriting controllers which construct their own call strings
+        # from requiring their extended call() methods to accept an unnecessary
+        # callstr parameter.
+        return self.call()
+      else:
+        return self.call(callstr)
+  
+  @classmethod
+  def do(cls,callstr=None,*args,**kwargs):
+    caller = cls(*args,**kwargs)
+    caller(callstr)
+    return caller
+  
+  @classmethod
+  def partial(cls,**kwargs):
+    return partial(cls.do,**kwargs)
+
+
+class SimpleGenericCLIcontroller(CommandLineCaller):
   
   _command = ''
   
@@ -60,35 +131,11 @@ class CLIcontrollerBase(object):
       formatted_option = "%s%s%s" % (key,sep,val)
     return formatted_option
   
-  @classmethod
-  def get_CLI_context_manager(cls):
-    return contextmanagers.CLIcontextManager()
-  
-  def __init__(self,dirpath=None,in_tmpdir=False,PIDpublisher=None,silent=False,
-               err_to_out=False,capture_stdout=False,capture_stderr=False,
-               callargs=None,callkwargs=None,option_sep='='):
-    self.dir = '.' if dirpath is None else dirpath
-    self.tmpdir = in_tmpdir
-    self.PIDpublisher = PIDpublisher
-    self.cliCM = self.get_CLI_context_manager()
-    
-    self.stdout = subprocess.PIPE if capture_stdout else False if silent\
-                                                                      else None
-    if err_to_out:
-      self.stderr = subprocess.STDOUT
-    else:
-      self.stderr = subprocess.PIPE if capture_stderr else False if silent\
-                                                                      else None
+  def __init__(self,callargs=None,callkwargs=None,option_sep='='):
     # Modifying original callargs makes partials too messy, so make a copy
     self.callargs = [a for a in callargs] if callargs is not None else None
     self.callkwargs = callkwargs
     self.optionsep = option_sep
-  
-  def in_workdir(self,name):
-    '''
-    Path to arbitrary name placed in working directory
-    '''
-    return os.path.join(self.dir,name)
   
   def construct_call_string(self):
     # Get name of command to execute from class attribute or from callargs
@@ -120,44 +167,6 @@ class CLIcontrollerBase(object):
     
     self.callstr = ' '.join(callstr_pieces)
   
-  def _run(self):
-    child_p = subprocess.Popen(self.callstr,stdout=self.stdout,
-                               stderr=self.stderr,shell=True)
-    if callable(self.PIDpublisher):
-      self.PIDpublisher(child_p.pid)
-    self.collected_stdout,self.collected_stderr = child_p.communicate()
-  
   def call(self):
-    '''
-    This method passes the call from __call__() to _run() running inside the
-    CLI context.
-    
-    Deriving classes should extend this method with any activities that must
-    be performed inside the CLI context before and/or after the call to _run()
-    '''
     self.construct_call_string()
-    self._run()
-  
-  def __call__(self):
-    if self.tmpdir:
-      self.tmpdir = self.cliCM.enter_tmpdir(self.dir)
-      self.dir = '.'
-    
-    if self.stdout is False or self.stderr is False:
-      devnull = open(os.devnull,'w')
-      self.cliCM.push(devnull)
-      if self.stdout is False:
-        self.stdout = devnull
-      if self.stderr is False:
-        self.stderr = devnull
-    
-    with self.cliCM:
-      return self.call()
-  
-  @classmethod
-  def do(cls,*args,**kwargs):
-    return cls(*args,**kwargs)()
-  
-  @classmethod
-  def partial(cls,**kwargs):
-    return partial(cls.do,**kwargs)
+    CommandLineCaller.call(self,self.callstr)
