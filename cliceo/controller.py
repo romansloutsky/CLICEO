@@ -10,12 +10,13 @@ class CommandLineCaller(object):
   def get_CLI_context_manager(cls):
     return contextmanagers.CLIcontextManager()
   
-  def __init__(self,PIDpublisher=None,in_tmpdir=False,tmpdir_loc=None,
+  def __init__(self,callstr,PIDpublisher=None,in_tmpdir=False,tmpdir_loc=None,
                     capture_stdout=False,silence_stdout=False,
                     err_to_out=False,capture_stderr=False,silence_stderr=False):
+    self.callstr = callstr
+    self.PIDpublisher = PIDpublisher
     self.tmpdir = in_tmpdir
     self.tmpdir_loc = tmpdir_loc
-    self.PIDpublisher = PIDpublisher
     self.cliCM = self.get_CLI_context_manager()
     
     self.stdout = subprocess.PIPE if capture_stdout else False if silence_stdout\
@@ -33,7 +34,7 @@ class CommandLineCaller(object):
       self.PIDpublisher(child_p.pid)
     self.captured_stdout,self.captured_stderr = child_p.communicate()
   
-  def call(self,callstr):
+  def call(self):
     '''
     This method runs inside the CLI context and passes the call from __call__()
     to _run().
@@ -41,9 +42,9 @@ class CommandLineCaller(object):
     Deriving classes should extend this method with any activities that must
     be performed inside the CLI context before and/or after the call to _run()
     '''
-    self._run(callstr)
+    self._run(self.callstr)
   
-  def __call__(self,callstr=None):
+  def __call__(self):
     if self.tmpdir:
       self.tmpdir = self.cliCM.enter_tmpdir(self.tmpdir_loc)
     
@@ -56,23 +57,17 @@ class CommandLineCaller(object):
         self.stderr = devnull
     
     with self.cliCM:
-      if callstr is None:
-        # Relieve inheriting controllers which construct their own call strings
-        # from requiring their extended call() methods to accept an unnecessary
-        # callstr parameter.
-        return self.call()
-      else:
-        return self.call(callstr)
+      return self.call()
   
   @classmethod
-  def do(cls,callstr=None,*args,**kwargs):
+  def do(cls,*args,**kwargs):
     caller = cls(*args,**kwargs)
-    caller(callstr)
+    caller()
     return caller
   
   @classmethod
-  def partial(cls,**kwargs):
-    return partial(cls.do,**kwargs)
+  def partial(cls,*args,**kwargs):
+    return partial(cls.do,*args,**kwargs)
 
 
 class SimpleGenericCLIcontroller(CommandLineCaller):
