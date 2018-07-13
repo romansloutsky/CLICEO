@@ -7,7 +7,7 @@ from ctypes import c_bool
 from functools import partial
 import contextlib2
 from tblib import pickling_support
-from .controller import CLIcontrollerBase
+from .controller import CommandLineCaller
 
 
 def _call_worker_in_worker_proc(task_arg):
@@ -95,7 +95,7 @@ class PoolManager(object):
     self.sleep_lock = self.shared_resources_manager.Lock()
     self.sleep_lock.acquire() # Workers will sleep by waiting to acquire lock
     self.ready_to_die_queue = self.shared_resources_manager.JoinableQueue()
-    if isinstance(work_doer,type) and issubclass(work_doer,CLIcontrollerBase):
+    if isinstance(work_doer,type) and issubclass(work_doer,CommandLineCaller):
       self.PIDregistry = self.shared_resources_manager.dict()
       
       def registerPID(PID):
