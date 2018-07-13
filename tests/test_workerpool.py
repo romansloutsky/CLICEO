@@ -76,13 +76,16 @@ class test_Worker(unittest.TestCase):
     self.assertTrue(isinstance(r2,TestError))
 
 
-class TestController(controller.CLIcontrollerBase):
-  _command = 'ls'
+class TestController(controller.CommandLineCaller):
+  def __init__(self,callvalue,*args,**kwargs):
+    controller.CommandLineCaller.__init__(self,
+                                          'call with %s' % str(callvalue),
+                                          *args,**kwargs)
   
   def call(self):
     if hasattr(self,'run_before_CLIcall'):
       self.run_before_CLIcall(self)
-    controller.CLIcontrollerBase.call(self)
+    controller.CommandLineCaller.call(self)
     if hasattr(self,'run_after_CLIcall'):
       self.run_after_CLIcall(self)
   
@@ -95,7 +98,7 @@ class TestController(controller.CLIcontrollerBase):
       # Calling the underlying function of the bound classmethod allows us to
       # pass the class we want -- this class -- but still call the base class'
       # classmethod
-      return controller.CLIcontrollerBase.do.__func__(cls,*args,**kwargs)
+      return controller.CommandLineCaller.do.__func__(cls,*args,**kwargs)
   
   @classmethod
   def partial(cls,run_before_CLIcall=None,run_after_CLIcall=None,raise_on=None,
@@ -106,7 +109,7 @@ class TestController(controller.CLIcontrollerBase):
       setattr(cls,'run_after_CLIcall',classmethod(run_after_CLIcall))
     cls.call_count = 0
     cls.raise_on_call_number = raise_on
-    return controller.CLIcontrollerBase.partial.__func__(cls,**kwargs)
+    return controller.CommandLineCaller.partial.__func__(cls,**kwargs)
 
 
 class AllWorkersSleeping(Exception):
@@ -306,12 +309,12 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
     CALLSEQ = range(NUMPROC)
     def test_CLIcontroller_before_call(cls,controller_instance):
       self.assertTrue(callable(controller_instance.PIDpublisher))
-      self.assertFalse(hasattr(controller_instance,'collected_stdout'))
-      self.assertFalse(hasattr(controller_instance,'collected_stderr'))
+      self.assertFalse(hasattr(controller_instance,'captured_stdout'))
+      self.assertFalse(hasattr(controller_instance,'captured_stderr'))
     
     def test_CLIcontroller_after_call(cls,controller_instance):
-      self.assertEqual(controller_instance.collected_stdout,'dummy_stdout_obj')
-      self.assertEqual(controller_instance.collected_stderr,'dummy_stderr_obj')
+      self.assertEqual(controller_instance.captured_stdout,'dummy_stdout_obj')
+      self.assertEqual(controller_instance.captured_stderr,'dummy_stderr_obj')
     
     with patched_multiproc_setup() as mocks:
       poolmanager = workerpool.PoolManager(TestController,numproc=NUMPROC,
@@ -331,7 +334,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
                                                  if v % NUMPROC == i % NUMPROC]])
       import subprocess
       self.assertItemsEqual(mocks['Popen'].call_args_list,
-                            [call('ls',stdout=subprocess.PIPE,
+                            [call('call with %d' % i,stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT,shell=True)
                              for i in CALLSEQ])
       self.assertItemsEqual(mocks['pid_value'].call_args_list,
@@ -345,7 +348,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
       mocks['workerpool'].join.assert_called_once_with()
 
 
-class test_exception_hangling_by_Worker_and_PoolManager(unittest.TestCase):
+class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
    
   def verify_shutdown_announced_and_all_workers_went_to_sleep(self,mocks):
     numproc = mocks['workerpool']._processes
