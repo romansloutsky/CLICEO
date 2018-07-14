@@ -57,7 +57,7 @@ class LabeledObject(object):
 
 class Worker(object):
   def __init__(self,work_callable,permission_to_proceed,sleep_lock,
-               ready_to_die_queue,PIDcleanup):
+               ready_to_die_queue,PIDcleanup=None):
     self.callable = work_callable
     self.proceed = permission_to_proceed
     self.sleep_lock = sleep_lock
@@ -69,7 +69,8 @@ class Worker(object):
       with LabeledObject.strip_label(arg) as (argval,reapply_label):
         try:
           result = self.callable(argval)
-          self.PIDcleanup()
+          if self.PIDcleanup is not None:
+            self.PIDcleanup()
         except Exception:
           result = sys.exc_info()
           # Automagically allow pickling traceback details for returning them to
@@ -98,27 +99,25 @@ class PoolManager(object):
     self.sleep_lock = self.shared_resources_manager.Lock()
     self.sleep_lock.acquire() # Workers will sleep by waiting to acquire lock
     self.ready_to_die_queue = self.shared_resources_manager.JoinableQueue()
+    
     if isinstance(work_doer,type) and issubclass(work_doer,CommandLineCaller):
       self.PIDregistry = self.shared_resources_manager.dict()
       work_callable = work_doer.partial(PIDpublisher=partial(registerPID,
                                                              self.PIDregistry),
                                         **kwargs)
+    
+      def unregisterPID():
+        try:
+          self.PIDregistry.pop(multiprocessing.current_process().name)
+        except KeyError:
+          pass
       
-      def registerPID(PID):
-        self.PIDregistry[multiprocessing.current_process().name] = PID
-      
-      work_callable = work_doer.partial(PIDpublisher=registerPID,**kwargs)
+      worker = Worker(work_callable,self.permission,self.sleep_lock,
+                      self.ready_to_die_queue,unregisterPID)
     else:
       work_callable = partial(work_doer,**kwargs)
-    
-    def unregisterPID():
-      try:
-        self.PIDregistry.pop(multiprocessing.current_process().name)
-      except:
-        pass
-    
-    worker = Worker(work_callable,self.permission,self.sleep_lock,
-                    self.ready_to_die_queue,unregisterPID)
+      worker = Worker(work_callable,self.permission,self.sleep_lock,
+                      self.ready_to_die_queue)
     
     def init_worker_process(worker):
       # Proper handling to KeyboardInterrupt achieved by having workers ignore
