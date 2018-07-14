@@ -168,7 +168,7 @@ class PoolManager(object):
             self.error_on_label = r.label
           raise rval[0],rval[1],rval[2] # Exception type, value, traceback
         else:
-          yield r
+          yield (r.label,rval) if isinstance(r,LabeledObject) else r
     except:
       self.announce_shutdown()
       self.cleanup_workers()
