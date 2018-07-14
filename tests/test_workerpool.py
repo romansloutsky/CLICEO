@@ -453,3 +453,27 @@ class test_PoolManager_execution_with_labels(unittest.TestCase):
         [r for r in poolmanager(LABELEDCALLSEQ,labeled_items=True)]
       self.assertTrue(hasattr(poolmanager,'error_on_label'))
       self.assertEqual(poolmanager.error_on_label,'3')
+
+
+class DummyController(controller.CommandLineCaller):
+  def __init__(self,val,**kwargs):
+    self.val = val
+    controller.CommandLineCaller.__init__(self,'sleep 0.01',**kwargs)
+  
+  def call(self):
+    controller.CommandLineCaller.call(self)
+    self.newval = self.val+100
+
+class test_PoolManager_integration_with_multiprocessing_Pool(unittest.TestCase):
+    
+  def test_integration_using_seq_item_numbering(self):
+    poolmanager = workerpool.PoolManager(DummyController,2)
+    for label,result in poolmanager(xrange(10),number_seq_items=True):
+      self.assertEqual(label+100,result.newval)
+    
+  def test_integration_using_arbitrary_labels(self):
+    poolmanager = workerpool.PoolManager(DummyController,2)
+    for label,result in poolmanager(((str(i+200),i) for i in xrange(10)),
+                                    labeled_items=True):
+      self.assertEqual(eval(label)-100,result.newval)
+    
