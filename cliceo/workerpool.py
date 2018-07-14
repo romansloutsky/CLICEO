@@ -153,10 +153,18 @@ class PoolManager(object):
           pass
     self.ready_to_die_queue.join()
   
-  def __call__(self,sequence_to_map):
+  def __call__(self,sequence_to_map,labeled_items=False,
+                    number_seq_items=False):
     '''
     Sequence order will not be preserved!
     '''
+    if labeled_items and number_seq_items:
+      raise ValueError("Only one of 'labeled_items' and 'number_seq_items' "\
+                       "may be true")
+    elif labeled_items:
+      sequence_to_map = LabeledObjectsSequence(sequence_to_map)
+    elif number_seq_items:
+      sequence_to_map = LabeledObjectsSequence(enumerate(sequence_to_map))
     try:
       results = self.proc_pool.imap_unordered(_call_worker_in_worker_proc,
                                               sequence_to_map)

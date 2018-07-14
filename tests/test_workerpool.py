@@ -381,7 +381,7 @@ class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
      
     with patched_multiproc_setup() as mocks:
       poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
-      # Since an arbitrary callable was used, not a CLIcontrollerBase instance,
+      # Since an arbitrary callable was used, not a CommandLineCaller instance,
       # poolmanager.PIDregistry should not have been created
       self.assertFalse(hasattr(poolmanager,'PIDregistry'))
       mocks['seq_to_map'] = CALLSEQ
@@ -435,11 +435,8 @@ class test_PoolManager_execution_with_labels(unittest.TestCase):
     
     with patched_multiproc_setup() as mocks:
       poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
-      results = [r for r in poolmanager(
-                            workerpool.LabeledObject.labeled_objects_sequence(
-                                                              LABELEDCALLSEQ))]
-      self.assertItemsEqual([(r.label,r.result) for r in results],
-                            zip(LABELS,[10*i for i in CALLSEQ]))
+      results = [r for r in poolmanager(LABELEDCALLSEQ,labeled_items=True)]
+      self.assertItemsEqual(results,zip(LABELS,[10*i for i in CALLSEQ]))
     
   def test_halt_on_error_with_labeled_input(self):
     NUMPROC = 3
@@ -453,8 +450,6 @@ class test_PoolManager_execution_with_labels(unittest.TestCase):
       poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
       with self.assertRaises(TestError):
         mocks['seq_to_map'] = CALLSEQ
-        [r for r in poolmanager(
-                            workerpool.LabeledObject.labeled_objects_sequence(
-                                                              LABELEDCALLSEQ))]
+        [r for r in poolmanager(LABELEDCALLSEQ,labeled_items=True)]
       self.assertTrue(hasattr(poolmanager,'error_on_label'))
       self.assertEqual(poolmanager.error_on_label,'3')
