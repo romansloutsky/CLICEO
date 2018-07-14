@@ -87,6 +87,9 @@ class Worker(object):
 def init_process_to_ignore_SIGINT():
   signal.signal(signal.SIGINT,signal.SIG_IGN)
 
+def registerPID(PIDregistry,PID):
+  PIDregistry[multiprocessing.current_process().name] = PID
+
 class PoolManager(object):
   def __init__(self,work_doer,numproc=None,**kwargs):
     self.shared_resources_manager = SyncManager()
@@ -97,6 +100,9 @@ class PoolManager(object):
     self.ready_to_die_queue = self.shared_resources_manager.JoinableQueue()
     if isinstance(work_doer,type) and issubclass(work_doer,CommandLineCaller):
       self.PIDregistry = self.shared_resources_manager.dict()
+      work_callable = work_doer.partial(PIDpublisher=partial(registerPID,
+                                                             self.PIDregistry),
+                                        **kwargs)
       
       def registerPID(PID):
         self.PIDregistry[multiprocessing.current_process().name] = PID
