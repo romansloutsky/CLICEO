@@ -48,12 +48,10 @@ class LabeledObject(object):
         yield obj.obj,obj.reapply_label_to_result
     else:
       yield obj,cls.do_nothing
-  
-  @classmethod
-  def labeled_objects_sequence(cls,sequence):
-    for label,obj in sequence:
-      yield cls(label,obj)
 
+def LabeledObjectsSequence(sequence_of_label_item_pairs):
+  for label,item in sequence_of_label_item_pairs:
+    yield LabeledObject(label,item)
 
 class Worker(object):
   def __init__(self,work_callable,permission_to_proceed,sleep_lock,
