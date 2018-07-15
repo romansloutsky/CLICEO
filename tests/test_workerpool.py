@@ -1,7 +1,10 @@
 import unittest
+import os
+import subprocess
 from multiprocessing import pool
 from itertools import cycle
-from mock import patch,PropertyMock,Mock,call,DEFAULT
+from tempfile import template as TEMPFILE_TEMPLATE
+from mock import patch,mock_open,PropertyMock,Mock,call,DEFAULT
 import contextlib2
 from cliceo import workerpool,controller
 
@@ -76,40 +79,117 @@ class test_Worker(unittest.TestCase):
     self.assertTrue(isinstance(r2,TestError))
 
 
+@patch('subprocess.Popen')
+@patch('cliceo.tempdir.TemporaryWorkingDirectory')
+@patch('__builtin__.open',new_callable=mock_open)
+class test_PartializedControllerCallable(unittest.TestCase):
+  def test_basic_call(self,patched_open,patched_TWD,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = ('dummySTDOUT',
+                                                           'dummySTDERR')
+    dummycallable = workerpool.PartializedControllerCallable(
+                                                  controller.CommandLineCaller,
+                                                             'dummy_callstr')
+    dummycontroller = dummycallable()
+    patched_Popen.assert_called_once_with('dummy_callstr',
+                                          stdout=dummycontroller.stdout,
+                                          stderr=dummycontroller.stderr,
+                                          shell=True)
+  
+  def test_call_w_PIDpublisher(self,patched_open,patched_TWD,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = ('dummySTDOUT',
+                                                           'dummySTDERR')
+    mockPIDpublisher = Mock()
+    dummycallable = workerpool.PartializedControllerCallable(
+                                                  controller.CommandLineCaller,
+                                                             'dummy_callstr')
+    dummycontroller = dummycallable(PIDpublisher=mockPIDpublisher)
+    mockPIDpublisher.assert_called_once_with(patched_Popen.return_value.pid)
+  
+  def test_execution_in_tempdir(self,patched_open,patched_TWD,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = ('dummySTDOUT',
+                                                           'dummySTDERR')
+    dummycallable = workerpool.PartializedControllerCallable(
+                                                  controller.CommandLineCaller,
+                                                             'dummy_callstr')
+    dummycontroller = dummycallable(in_tmpdir=True,tmpdir_loc='/desired/loc')
+    patched_TWD.assert_called_once_with(dir='/desired/loc',
+                                        prefix=TEMPFILE_TEMPLATE,suffix='')
+  
+  def test_STDIN_and_STDERR_capture(self,patched_open,patched_TWD,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = ('dummySTDOUT',
+                                                           'dummySTDERR')
+    dummycallable = workerpool.PartializedControllerCallable(
+                                                  controller.CommandLineCaller,
+                                                             'dummy_callstr',
+                                                           capture_stdout=True)
+    dummycontroller = dummycallable(capture_stderr=True)
+    self.assertEqual(dummycontroller.captured_stdout,'dummySTDOUT')
+    self.assertEqual(dummycontroller.captured_stderr,'dummySTDERR')
+    patched_Popen.assert_called_once_with('dummy_callstr',
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE,
+                                          shell=True)
+  
+  def test_STDIN_and_STDERR_silencing(self,patched_open,patched_TWD,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = ('dummySTDOUT',
+                                                           'dummySTDERR')
+    dummycallable = workerpool.PartializedControllerCallable(
+                                                  controller.CommandLineCaller,
+                                                               'dummy_callstr')
+    dummycontroller = dummycallable(silence_stdout=True,silence_stderr=True)
+    patched_open.assert_called_once_with(os.devnull,'w')
+    patched_Popen.assert_called_once_with('dummy_callstr',
+                                          stdout=patched_open.return_value,
+                                          stderr=patched_open.return_value,
+                                          shell=True)
+  
+  def test_STDIN_and_STDERR_redirection(self,patched_open,patched_TWD,patched_Popen):
+    patched_Popen.return_value.communicate.return_value = ('dummySTDOUT',
+                                                           'dummySTDERR')
+    dummycallable = workerpool.PartializedControllerCallable(
+                                                  controller.CommandLineCaller,
+                                                               'dummy_callstr')
+    dummycontroller = dummycallable(err_to_out=True)
+    self.assertIs(dummycontroller.stderr,subprocess.STDOUT)
+    patched_Popen.assert_called_once_with('dummy_callstr',stdout=None,
+                                          stderr=subprocess.STDOUT,shell=True)
+
+
 class TestController(controller.CommandLineCaller):
-  def __init__(self,callvalue,*args,**kwargs):
+  call_count = 0
+  
+  @classmethod
+  def attach_classmethods(cls,run_before_CLIcall=None,run_after_CLIcall=None):
+    if run_before_CLIcall is not None:
+      setattr(cls,'run_before_CLIcall',classmethod(run_before_CLIcall))
+    if run_after_CLIcall is not None:
+      setattr(cls,'run_after_CLIcall',classmethod(run_after_CLIcall))
+  
+  @classmethod
+  def set_callnum_to_raise_exception(cls,raise_on):
+    cls.raise_on_call_number = raise_on
+  
+  def __init__(self,callvalue,run_before_CLIcall=None,run_after_CLIcall=None,
+               raise_on=None,**kwargs):
+    self.attach_classmethods(run_before_CLIcall,run_after_CLIcall)
+    self.set_callnum_to_raise_exception(raise_on)
     controller.CommandLineCaller.__init__(self,
                                           'call with %s' % str(callvalue),
-                                          *args,**kwargs)
+                                          **kwargs)
+  
+  @classmethod
+  def update_call_count(cls):
+    cls.call_count += 1
+    if cls.call_count == cls.raise_on_call_number:
+      raise TestError
   
   def call(self):
+    self.update_call_count()
     if hasattr(self,'run_before_CLIcall'):
       self.run_before_CLIcall(self)
     controller.CommandLineCaller.call(self)
     if hasattr(self,'run_after_CLIcall'):
       self.run_after_CLIcall(self)
-  
-  @classmethod
-  def do(cls,*args,**kwargs):
-    cls.call_count += 1
-    if cls.call_count == cls.raise_on_call_number:
-      raise TestError
-    else:
-      # Calling the underlying function of the bound classmethod allows us to
-      # pass the class we want -- this class -- but still call the base class'
-      # classmethod
-      return controller.CommandLineCaller.do.__func__(cls,*args,**kwargs)
-  
-  @classmethod
-  def partial(cls,run_before_CLIcall=None,run_after_CLIcall=None,raise_on=None,
-              **kwargs):
-    if run_before_CLIcall is not None:
-      setattr(cls,'run_before_CLIcall',classmethod(run_before_CLIcall))
-    if run_after_CLIcall is not None:
-      setattr(cls,'run_after_CLIcall',classmethod(run_after_CLIcall))
-    cls.call_count = 0
-    cls.raise_on_call_number = raise_on
-    return controller.CommandLineCaller.partial.__func__(cls,**kwargs)
 
 
 class AllWorkersSleeping(Exception):
@@ -332,7 +412,6 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
         self.assertItemsEqual(d['worker'].call_args_list,
                               [call(j) for j in [v for v in CALLSEQ
                                                  if v % NUMPROC == i % NUMPROC]])
-      import subprocess
       self.assertItemsEqual(mocks['Popen'].call_args_list,
                             [call('call with %d' % i,stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT,shell=True)

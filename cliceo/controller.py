@@ -1,6 +1,5 @@
 import os
 import subprocess
-from functools import partial
 from . import contextmanagers
 
 
@@ -98,16 +97,6 @@ class CommandLineCaller(object):
     
     with self.cliCM:
       return self.call()
-  
-  @classmethod
-  def do(cls,*args,**kwargs):
-    caller = cls(*args,**kwargs)
-    caller()
-    return caller
-  
-  @classmethod
-  def partial(cls,*args,**kwargs):
-    return partial(cls.do,*args,**kwargs)
 
 
 # class SimpleGenericCLIcontroller(CommandLineCaller):

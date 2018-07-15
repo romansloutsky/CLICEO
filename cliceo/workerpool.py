@@ -10,10 +10,6 @@ from tblib import pickling_support
 from .controller import CommandLineCaller
 
 
-def _call_worker_in_worker_proc(task_arg):
-  return globals()['worker'](task_arg)
-
-
 class LabeledObject(object):
   def __init__(self,label,obj,is_result=False):
     self.label = label
@@ -83,6 +79,16 @@ class Worker(object):
       self.sleep_lock.acquire()
 
 
+def PartializedControllerCallable(cls,*partial_args,**partial_kwargs):
+  def do_work(cls,*args,**kwargs):
+    caller = cls(*args,**kwargs)
+    caller()
+    return caller
+  return partial(do_work,cls,*partial_args,**partial_kwargs)
+
+def _call_worker_in_worker_proc(task_arg):
+  return globals()['worker'](task_arg)
+
 def init_process_to_ignore_SIGINT():
   signal.signal(signal.SIGINT,signal.SIG_IGN)
 
@@ -100,9 +106,11 @@ class PoolManager(object):
     
     if isinstance(work_doer,type) and issubclass(work_doer,CommandLineCaller):
       self.PIDregistry = self.shared_resources_manager.dict()
-      work_callable = work_doer.partial(PIDpublisher=partial(registerPID,
+      work_callable = PartializedControllerCallable(work_doer,
+                                                    PIDpublisher=partial(
+                                                                   registerPID,
                                                              self.PIDregistry),
-                                        **kwargs)
+                                                   **kwargs)
     
       def unregisterPID():
         try:
