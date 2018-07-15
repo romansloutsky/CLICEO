@@ -346,7 +346,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
     def dummy_work_doer(arg):
       pass
     with patched_multiproc_setup() as mocks:
-      poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC,
+      poolmanager = workerpool.PoolManager(dummy_work_doer,CALLSEQ,numproc=NUMPROC,
                                            dummy_arg_to_partial='dummy_arg')
       patched_partial.assert_called_once_with(dummy_work_doer,
                                               dummy_arg_to_partial='dummy_arg')
@@ -360,7 +360,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
       self.assertItemsEqual(mocks['PIDregistry'].__setitem__.call_args_list,[])
       self.assertItemsEqual(mocks['PIDregistry'].pop.call_args_list,[])
       
-      [r for r in poolmanager(CALLSEQ)]
+      [r for r in poolmanager()]
       
       mocks['workerpool'].imap_unordered.assert_called_once_with(
                             workerpool._call_worker_in_worker_proc,CALLSEQ)
@@ -397,7 +397,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
       self.assertEqual(controller_instance.captured_stderr,'dummy_stderr_obj')
     
     with patched_multiproc_setup() as mocks:
-      poolmanager = workerpool.PoolManager(TestController,numproc=NUMPROC,
+      poolmanager = workerpool.PoolManager(TestController,CALLSEQ,numproc=NUMPROC,
                              run_before_CLIcall=test_CLIcontroller_before_call,
                                run_after_CLIcall=test_CLIcontroller_after_call,
                                            err_to_out=True,capture_stdout=True)
@@ -406,7 +406,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
       self.assertItemsEqual(mocks['PIDregistry'].pop.call_args_list,[])
       
       mocks['pid_value'].side_effect = ['dummyPID%d' % i for i in CALLSEQ]
-      [r for r in poolmanager(CALLSEQ)]
+      [r for r in poolmanager()]
       
       for i,d in enumerate(mocks['worker_global_dicts']):
         self.assertItemsEqual(d['worker'].call_args_list,
@@ -459,7 +459,7 @@ class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
     dummy_work_doer = Mock(side_effect=[0,1,2,TestError,4,5])
      
     with patched_multiproc_setup() as mocks:
-      poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
+      poolmanager = workerpool.PoolManager(dummy_work_doer,CALLSEQ,numproc=NUMPROC)
       # Since an arbitrary callable was used, not a CommandLineCaller instance,
       # poolmanager.PIDregistry should not have been created
       self.assertFalse(hasattr(poolmanager,'PIDregistry'))
@@ -467,7 +467,7 @@ class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
       mocks['verify_shutdown_to_this_point'] = workerpool.partial(
             self.verify_shutdown_announced_and_all_workers_went_to_sleep,mocks)
       with self.assertRaises(TestError):
-        [r for r in poolmanager(CALLSEQ)]
+        [r for r in poolmanager()]
       mocks['ready_to_die_queue'].join.assert_called_once_with()
       self.assertItemsEqual(mocks['PIDregistry'].values.call_args_list,[])
       self.verify_pool_termination_closure_and_joining(mocks)
@@ -484,7 +484,7 @@ class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
      
     with patched_multiproc_setup() as mocks:
       mocks['PIDregistry'].values.return_value = ['dummyPID']
-      poolmanager = workerpool.PoolManager(TestController,numproc=NUMPROC,
+      poolmanager = workerpool.PoolManager(TestController,CALLSEQ,numproc=NUMPROC,
                                            err_to_out=True,capture_stdout=True,
                                            raise_on=3)
       self.assertTrue(hasattr(poolmanager,'PIDregistry'))
@@ -492,7 +492,7 @@ class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
       mocks['verify_shutdown_to_this_point'] = workerpool.partial(
             self.verify_shutdown_announced_and_all_workers_went_to_sleep,mocks)
       with self.assertRaises(TestError):
-        [r for r in poolmanager(CALLSEQ)]
+        [r for r in poolmanager()]
       mocks['ready_to_die_queue'].join.assert_called_once_with()
       mocks['PIDregistry'].values.assert_called_once_with()
       patchedPsutil.assert_called_once_with(pid='dummyPID')
@@ -513,8 +513,9 @@ class test_PoolManager_execution_with_labels(unittest.TestCase):
     dummy_work_doer = Mock(side_effect=[10*i for i in CALLSEQ])
     
     with patched_multiproc_setup() as mocks:
-      poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
-      results = [r for r in poolmanager(LABELEDCALLSEQ,labeled_items=True)]
+      poolmanager = workerpool.PoolManager(dummy_work_doer,LABELEDCALLSEQ,
+                                           numproc=NUMPROC,labeled_items=True)
+      results = [r for r in poolmanager()]
       self.assertItemsEqual(results,zip(LABELS,[10*i for i in CALLSEQ]))
     
   def test_halt_on_error_with_labeled_input(self):
@@ -526,10 +527,11 @@ class test_PoolManager_execution_with_labels(unittest.TestCase):
                                         for i in CALLSEQ])
     
     with patched_multiproc_setup() as mocks:
-      poolmanager = workerpool.PoolManager(dummy_work_doer,numproc=NUMPROC)
+      poolmanager = workerpool.PoolManager(dummy_work_doer,LABELEDCALLSEQ,
+                                           labeled_items=True,numproc=NUMPROC)
       with self.assertRaises(TestError):
         mocks['seq_to_map'] = CALLSEQ
-        [r for r in poolmanager(LABELEDCALLSEQ,labeled_items=True)]
+        [r for r in poolmanager()]
       self.assertTrue(hasattr(poolmanager,'error_on_label'))
       self.assertEqual(poolmanager.error_on_label,'3')
 
@@ -546,13 +548,15 @@ class DummyController(controller.CommandLineCaller):
 class test_PoolManager_integration_with_multiprocessing_Pool(unittest.TestCase):
     
   def test_integration_using_seq_item_numbering(self):
-    poolmanager = workerpool.PoolManager(DummyController,2)
-    for label,result in poolmanager(xrange(10),number_seq_items=True):
+    poolmanager = workerpool.PoolManager(DummyController,xrange(10),2,
+                                         number_seq_items=True)
+    for label,result in poolmanager():
       self.assertEqual(label+100,result.newval)
     
   def test_integration_using_arbitrary_labels(self):
-    poolmanager = workerpool.PoolManager(DummyController,2)
-    for label,result in poolmanager(((str(i+200),i) for i in xrange(10)),
-                                    labeled_items=True):
+    poolmanager = workerpool.PoolManager(DummyController,
+                                         ((str(i+200),i) for i in xrange(10)),2,
+                                         labeled_items=True)
+    for label,result in poolmanager():
       self.assertEqual(eval(label)-100,result.newval)
     

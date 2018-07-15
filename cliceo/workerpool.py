@@ -96,7 +96,18 @@ def registerPID(PIDregistry,PID):
   PIDregistry[multiprocessing.current_process().name] = PID
 
 class PoolManager(object):
-  def __init__(self,work_doer,numproc=None,**kwargs):
+  def __init__(self,work_doer,sequence_to_map,numproc=None,labeled_items=False,
+                    number_seq_items=False,**kwargs):
+    if labeled_items and number_seq_items:
+      raise ValueError("Only one of 'labeled_items' and 'number_seq_items' "\
+                       "may be true")
+    elif labeled_items:
+      self.sequence_to_map = LabeledObjectsSequence(sequence_to_map)
+    elif number_seq_items:
+      self.sequence_to_map = LabeledObjectsSequence(enumerate(sequence_to_map))
+    else:
+      self.sequence_to_map = sequence_to_map
+    
     self.shared_resources_manager = SyncManager()
     self.shared_resources_manager.start(initializer=init_process_to_ignore_SIGINT)
     self.permission = self.shared_resources_manager.Value(c_bool,True)
@@ -161,21 +172,13 @@ class PoolManager(object):
           pass
     self.ready_to_die_queue.join()
   
-  def __call__(self,sequence_to_map,labeled_items=False,
-                    number_seq_items=False):
+  def __call__(self):
     '''
     Sequence order will not be preserved!
     '''
-    if labeled_items and number_seq_items:
-      raise ValueError("Only one of 'labeled_items' and 'number_seq_items' "\
-                       "may be true")
-    elif labeled_items:
-      sequence_to_map = LabeledObjectsSequence(sequence_to_map)
-    elif number_seq_items:
-      sequence_to_map = LabeledObjectsSequence(enumerate(sequence_to_map))
     try:
       results = self.proc_pool.imap_unordered(_call_worker_in_worker_proc,
-                                              sequence_to_map)
+                                              self.sequence_to_map)
       for r in results:
         rval = r.result if isinstance(r,LabeledObject) else r
         if isinstance(rval,tuple) and len(rval) == 3 and issubclass(rval[0],
