@@ -172,7 +172,7 @@ class PoolManager(object):
           pass
     self.ready_to_die_queue.join()
   
-  def __call__(self):
+  def _iterate(self):
     '''
     Sequence order will not be preserved!
     '''
@@ -197,3 +197,11 @@ class PoolManager(object):
       self.proc_pool.close()
       self.proc_pool.join()
       self.shared_resources_manager.shutdown()
+  
+  def __iter__(self):
+      if not hasattr(self,'_iterator'):
+          self._iterator = self._iterate()
+      return self._iterator
+  
+  def next(self):
+      return next(self.__iter__())

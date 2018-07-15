@@ -360,7 +360,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
       self.assertItemsEqual(mocks['PIDregistry'].__setitem__.call_args_list,[])
       self.assertItemsEqual(mocks['PIDregistry'].pop.call_args_list,[])
       
-      [r for r in poolmanager()]
+      [r for r in poolmanager]
       
       mocks['workerpool'].imap_unordered.assert_called_once_with(
                             workerpool._call_worker_in_worker_proc,CALLSEQ)
@@ -406,7 +406,7 @@ class test_successful_parallel_execution_with_PoolManager(unittest.TestCase):
       self.assertItemsEqual(mocks['PIDregistry'].pop.call_args_list,[])
       
       mocks['pid_value'].side_effect = ['dummyPID%d' % i for i in CALLSEQ]
-      [r for r in poolmanager()]
+      [r for r in poolmanager]
       
       for i,d in enumerate(mocks['worker_global_dicts']):
         self.assertItemsEqual(d['worker'].call_args_list,
@@ -467,7 +467,7 @@ class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
       mocks['verify_shutdown_to_this_point'] = workerpool.partial(
             self.verify_shutdown_announced_and_all_workers_went_to_sleep,mocks)
       with self.assertRaises(TestError):
-        [r for r in poolmanager()]
+        [r for r in poolmanager]
       mocks['ready_to_die_queue'].join.assert_called_once_with()
       self.assertItemsEqual(mocks['PIDregistry'].values.call_args_list,[])
       self.verify_pool_termination_closure_and_joining(mocks)
@@ -492,7 +492,7 @@ class test_exception_handling_by_Worker_and_PoolManager(unittest.TestCase):
       mocks['verify_shutdown_to_this_point'] = workerpool.partial(
             self.verify_shutdown_announced_and_all_workers_went_to_sleep,mocks)
       with self.assertRaises(TestError):
-        [r for r in poolmanager()]
+        [r for r in poolmanager]
       mocks['ready_to_die_queue'].join.assert_called_once_with()
       mocks['PIDregistry'].values.assert_called_once_with()
       patchedPsutil.assert_called_once_with(pid='dummyPID')
@@ -515,7 +515,7 @@ class test_PoolManager_execution_with_labels(unittest.TestCase):
     with patched_multiproc_setup() as mocks:
       poolmanager = workerpool.PoolManager(dummy_work_doer,LABELEDCALLSEQ,
                                            numproc=NUMPROC,labeled_items=True)
-      results = [r for r in poolmanager()]
+      results = [r for r in poolmanager]
       self.assertItemsEqual(results,zip(LABELS,[10*i for i in CALLSEQ]))
     
   def test_halt_on_error_with_labeled_input(self):
@@ -531,7 +531,7 @@ class test_PoolManager_execution_with_labels(unittest.TestCase):
                                            labeled_items=True,numproc=NUMPROC)
       with self.assertRaises(TestError):
         mocks['seq_to_map'] = CALLSEQ
-        [r for r in poolmanager()]
+        [r for r in poolmanager]
       self.assertTrue(hasattr(poolmanager,'error_on_label'))
       self.assertEqual(poolmanager.error_on_label,'3')
 
@@ -550,13 +550,20 @@ class test_PoolManager_integration_with_multiprocessing_Pool(unittest.TestCase):
   def test_integration_using_seq_item_numbering(self):
     poolmanager = workerpool.PoolManager(DummyController,xrange(10),2,
                                          number_seq_items=True)
-    for label,result in poolmanager():
+    for label,result in poolmanager:
       self.assertEqual(label+100,result.newval)
     
   def test_integration_using_arbitrary_labels(self):
     poolmanager = workerpool.PoolManager(DummyController,
                                          ((str(i+200),i) for i in xrange(10)),2,
                                          labeled_items=True)
-    for label,result in poolmanager():
+    for label,result in poolmanager:
       self.assertEqual(eval(label)-100,result.newval)
     
+  def test_integration_using_next_to_iterate(self):
+    poolmanager = workerpool.PoolManager(DummyController,xrange(4),2,
+                                         labeled_items=True)
+    with self.assertRaises(StopIteration):
+      while True:
+        label,result = next(poolmanager)
+        self.assertEqual(label+100,result.newval)
