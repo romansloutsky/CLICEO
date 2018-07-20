@@ -80,3 +80,22 @@ class test_CLIcontextManager(unittest.TestCase):
       self.assertItemsEqual(file_removing_obj.__exit__.call_args_list,[])
     file_removing_obj.__exit__.assert_called_once_with(file_removing_obj,
                                                        None,None,None)
+  
+  def test_random_name_generation(self):
+    import os
+    import tempfile
+    cliCM = contextmanagers.CLIcontextManager()
+    
+    basic_in_curr_dir = cliCM.random_name()
+    self.assertEqual(os.path.split(basic_in_curr_dir)[0],'')
+    self.assertEqual(basic_in_curr_dir[:3],tempfile.template)
+    
+    dirpath = os.path.abspath(os.path.split(__file__)[0])
+    basic_in_specified_dir = cliCM.random_name(dirpath)
+    self.assertEqual(os.path.split(basic_in_specified_dir)[0],dirpath)
+    
+    modified_prefix_and_suffix = cliCM.random_name(prefix='pref',suffix='suf')
+    self.assertEqual(os.path.split(modified_prefix_and_suffix)[0],'')
+    self.assertEqual(modified_prefix_and_suffix[:4],'pref')
+    self.assertEqual(modified_prefix_and_suffix[-3:],'suf')
+      

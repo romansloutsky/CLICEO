@@ -39,7 +39,7 @@ def RemoveFileOnExit(fpath):
 class CLIcontextManager(object):
   def __enter__(self):
     return self
-  
+    
   @property
   def exitstack(self):
     if not hasattr(self,'_exitstack'):
@@ -67,6 +67,15 @@ class CLIcontextManager(object):
   
   def register_for_removal(self,fpath):
     self.push(RemoveFileOnExit(fpath))
+  
+  def random_name(self,dirpath=None,suffix="",prefix=tempfile.template):
+    dirpath = '.' if dirpath is None else dirpath
+    names_generator = tempfile._get_candidate_names()
+    name_candidate = prefix+names_generator.next()+suffix
+    while os.path.exists(os.path.join(dirpath,name_candidate)):
+      name_candidate = prefix+names_generator.next()+suffix
+    return name_candidate if dirpath == '.'\
+                                      else os.path.join(dirpath,name_candidate)
   
   def __exit__(self,*exception_details):
     if hasattr(self,'_exitstack'):
