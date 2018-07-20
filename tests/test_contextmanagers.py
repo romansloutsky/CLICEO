@@ -29,27 +29,26 @@ class test_NamedTemporaryFileWithContents(unittest.TestCase):
 
 class test_CLIcontextManager(unittest.TestCase):
   
-  def setUp(self):
-    self.cliCM = contextmanagers.CLIcontextManager()
-  
   def test_handling_pushed_context(self):
+    cliCM = contextmanagers.CLIcontextManager()
     context_obj = MagicMock()
-    self.cliCM.push(context_obj)
-    with self.cliCM:
+    cliCM.push(context_obj)
+    with cliCM:
       self.assertItemsEqual(context_obj.__exit__.call_args_list,[])
     context_obj.__exit__.assert_called_once_with(context_obj,None,None,None)
   
   @patch('cliceo.tempdir.TemporaryWorkingDirectory')
   def test_handling_entered_tmpdir(self,
                                    patched_TemporaryWorkingDirectory_factory):
+    cliCM = contextmanagers.CLIcontextManager()
     patched_tmpdir_obj = patched_TemporaryWorkingDirectory_factory.return_value
-    tmpdir = self.cliCM.enter_tmpdir()
+    tmpdir = cliCM.enter_tmpdir()
     self.assertIs(tmpdir,patched_tmpdir_obj.__enter__.return_value)
     patched_TemporaryWorkingDirectory_factory.assert_called_once_with(dir=None,
                                                                      suffix="",
                                                                   prefix='tmp')
     patched_tmpdir_obj.__enter__.assert_called_once_with(patched_tmpdir_obj)
-    with self.cliCM:
+    with cliCM:
       self.assertItemsEqual(patched_tmpdir_obj.__exit__.call_args_list,[])
     patched_tmpdir_obj.__exit__.assert_called_once_with(patched_tmpdir_obj,
                                                         None,None,None)
@@ -57,25 +56,27 @@ class test_CLIcontextManager(unittest.TestCase):
   @patch('cliceo.contextmanagers.NamedTemporaryFileWithContents')
   def test_handling_written_tempfile(self,
                                      patched_NamedTemporaryFileWithContents):
+    cliCM = contextmanagers.CLIcontextManager()
     patched_tmpfile_obj = patched_NamedTemporaryFileWithContents.return_value
-    tmpfpath = self.cliCM.write_to_tempfile('dummy_contents')
+    tmpfpath = cliCM.write_to_tempfile('dummy_contents')
     self.assertIs(tmpfpath,patched_tmpfile_obj.__enter__.return_value)
     patched_NamedTemporaryFileWithContents.assert_called_once_with(mode='w+b',
                                                      contents='dummy_contents',
                                                      dirpath=None,bufsize=-1,
                                                      suffix="",prefix='tmp')
     patched_tmpfile_obj.__enter__.assert_called_once_with(patched_tmpfile_obj)
-    with self.cliCM:
+    with cliCM:
       self.assertItemsEqual(patched_tmpfile_obj.__exit__.call_args_list,[])
     patched_tmpfile_obj.__exit__.assert_called_once_with(patched_tmpfile_obj,
                                                         None,None,None)
     
   @patch('cliceo.contextmanagers.RemoveFileOnExit')
   def test_registering_for_removal(self,patched_RemoveFileOnExit):
+    cliCM = contextmanagers.CLIcontextManager()
     file_removing_obj = patched_RemoveFileOnExit.return_value
-    self.cliCM.register_for_removal('dummy_filepath')
+    cliCM.register_for_removal('dummy_filepath')
     patched_RemoveFileOnExit.assert_called_once_with('dummy_filepath')
-    with self.cliCM:
+    with cliCM:
       self.assertItemsEqual(file_removing_obj.__exit__.call_args_list,[])
     file_removing_obj.__exit__.assert_called_once_with(file_removing_obj,
                                                        None,None,None)
